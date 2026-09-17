@@ -1,4 +1,23 @@
+<!-- minidauth:start -->
+> ## 🔒 This build is minidauth'd
+>
+> **Documenso, with a key nobody holds.** What a signed document gives away, its title, the recipients, the email sent to signers and the signatures themselves is sealed before it ever reaches the database, encrypted with a key that is never assembled anywhere, not even to decrypt. The key lives as threshold shares across the [Tide](https://tide.org) network, so the classic breach, someone walking off with your database or a backup, turns up nothing readable.
+>
+> - **Your database holds only ciphertext.** A stolen dump or a leaked backup is useless to whoever takes it.
+> - **There is no standing key to steal.** The vendor key is never whole, not in this app and not on any single server.
+> - **Reads are governed, not assumed.** A quorum grants the reading role. Revoke it and reads stop everywhere, at once.
+> - **Nobody juggles keys.** People keep the login they already have. The gate is a role, not a keyfile they can lose.
+> - **Nothing else changes.** Documenso works exactly as it does upstream, and sealing stays off until you turn it on.
+>
+> See how it works → **[minidauth](https://github.com/sashyo/minidauth)** · **[dauth.me](https://www.dauth.me)**
+<!-- minidauth:end -->
+
 <img src="https://github.com/documenso/documenso/assets/13398220/a643571f-0239-46a6-a73e-6bef38d1228b" alt="Documenso Logo">
+
+<!-- minidauth-badge -->
+<p align="center">
+  <a href="https://github.com/sashyo/minidauth"><img alt="minidauth'd" src="https://img.shields.io/badge/minidauth%27d-sealed_at_rest-2ea44f?style=for-the-badge&logo=lock&logoColor=white"></a>
+</p>
 
 <p align="center" style="margin-top: 20px">
   <p align="center">
