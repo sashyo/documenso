@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { DEFAULT_DOCUMENT_DATE_FORMAT } from '@documenso/lib/constants/date-formats';
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '@documenso/lib/constants/time-zones';
 import { DOCUMENT_AUDIT_LOG_TYPE, RECIPIENT_DIFF_TYPE } from '@documenso/lib/types/document-audit-logs';
@@ -5,6 +6,9 @@ import type { RequestMetadata } from '@documenso/lib/universal/extract-request-m
 import { fieldsContainUnsignedRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
+import { withMinidauthReader } from '@documenso/prisma/extensions/minidauth-reader';
+import { openSealedRecords } from '@documenso/prisma/extensions/minidauth-seal';
+import { cohortSign, signingStatement } from '@documenso/prisma/extensions/minidauth-sign';
 import {
   DocumentSigningOrder,
   DocumentStatus,
@@ -98,6 +102,12 @@ export const completeDocumentWithToken = async ({
   }
 
   const [recipient] = envelope.recipients;
+
+  // The recipient's name is sealed at rest. Open it on the document owner's reading authority before
+  // it is used or written back below, so completion neither re-seals an already-sealed value (a
+  // double-seal) nor loses the real name from the cohort signing statement. Fail-safe: if sealing is
+  // off or unavailable, the value is left untouched.
+  await withMinidauthReader(envelope.userId, () => openSealedRecords('recipient', recipient));
 
   // A retried or duplicate completion request for an already signed
   // recipient throws a code the router resolves idempotently. This must be
@@ -398,6 +408,32 @@ export const completeDocumentWithToken = async ({
       }),
     });
   });
+
+  // Notarise the completion with the Tide ORK cohort: threshold-sign a statement that this recipient
+  // signed this envelope, under the app's (document owner's) authority, so the completed signature is
+  // anchored to the network and unforgeable by any operator or a stolen database. Best-effort and
+  // guarded: a signing service being down must never block a person from completing their signature.
+  try {
+    const itemHash = createHash('sha256')
+      .update(JSON.stringify(fields.map((f) => ({ t: f.type, v: f.customText, i: f.inserted }))))
+      .digest('hex');
+    const statement = signingStatement({
+      envelopeId: envelope.id,
+      recipientEmail: recipient.email,
+      itemHash,
+      signedAt: new Date().toISOString(),
+    });
+    const signature = await withMinidauthReader(envelope.userId, () => cohortSign(statement));
+
+    if (signature) {
+      await prisma.recipient.update({
+        where: { id: recipient.id },
+        data: { cohortSignature: signature, cohortStatement: statement },
+      });
+    }
+  } catch {
+    // Signing is best-effort; never block completion on it.
+  }
 
   const envelopeWithRelations = await prisma.envelope.findUniqueOrThrow({
     where: { id: envelope.id },

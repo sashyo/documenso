@@ -658,6 +658,14 @@ model Recipient {
   cscCredential CscCredential?
   cscSession    CscSession?
 
+  /// A Tide ORK cohort threshold signature (base64) over `cohortStatement`, produced when this
+  /// recipient completed signing. Verifiable by anyone with the vendor public key; no signing key is
+  /// ever held by this app. Null unless minidauth signing is configured. See minidauth-sign.ts.
+  cohortSignature String?
+  /// The exact statement the cohort signed, rebuilt verbatim to verify (envelope, signer, item hash,
+  /// time). Stored so a verifier checks the signature against what was signed, not a recomputation.
+  cohortStatement String?
+
   @@index([token])
   @@index([email])
   @@index([envelopeId])

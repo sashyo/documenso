@@ -1,4 +1,6 @@
 import { prisma } from '@documenso/prisma';
+import { withMinidauthReader } from '@documenso/prisma/extensions/minidauth-reader';
+import { openSealedRecords } from '@documenso/prisma/extensions/minidauth-seal';
 import DocumentMetaSchema from '@documenso/prisma/generated/zod/modelSchema/DocumentMetaSchema';
 import EnvelopeItemSchema from '@documenso/prisma/generated/zod/modelSchema/EnvelopeItemSchema';
 import EnvelopeSchema from '@documenso/prisma/generated/zod/modelSchema/EnvelopeSchema';
@@ -242,6 +244,13 @@ export const getEnvelopeForRecipientSigning = async ({
     });
   }
 
+  // The recipient's signing token, verified above, authorises them to view this document so they can
+  // sign it. They are not themselves a minidauth-granted reader, so open the sealed fields (title,
+  // recipient names, email subject/message, any signatures) on the document owner's reading authority
+  // - the app has just established this recipient's right to view. Fail-safe: stays sealed if the
+  // owner lacks the grant or the sidecar is down.
+  await withMinidauthReader(envelope.userId, () => openSealedRecords('envelope', envelope));
+
   const settings = await getTeamSettings({ teamId: envelope.teamId });
 
   // Get the signature if they have put it in already.
@@ -259,6 +268,9 @@ export const getEnvelopeForRecipientSigning = async ({
       typedSignature: true,
     },
   });
+
+  // Open the recipient's own already-placed signature (sealed) on the same authority.
+  await withMinidauthReader(envelope.userId, () => openSealedRecords('signature', recipientSignature));
 
   let isRecipientsTurn = true;
 
