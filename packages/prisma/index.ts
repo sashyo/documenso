@@ -4,6 +4,7 @@ import { readReplicas } from '@prisma/extension-read-replicas';
 import { Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
 import kyselyExtension from 'prisma-extension-kysely';
 
+import { minidauthSealExtension } from './extensions/minidauth-seal';
 import type { DB } from './generated/types';
 import { getDatabaseUrl } from './helper';
 import { remember } from './utils/remember';
@@ -11,13 +12,17 @@ import { remember } from './utils/remember';
 const prisma = remember(
   'prisma',
   () =>
+    // The minidauth seal extension is the outermost layer: it seals the SEALED fields on write before
+    // they reach Postgres and opens them on read for a quorum-granted reader. A no-op unless
+    // MINIDAUTH_SEAL_URL is set. Cast back to PrismaClient so downstream types are unchanged; the
+    // runtime object still carries the extension.
     new PrismaClient({
       datasourceUrl: getDatabaseUrl(),
       transactionOptions: {
         maxWait: 5000,
         timeout: 10000,
       },
-    }),
+    }).$extends(minidauthSealExtension()) as unknown as PrismaClient,
 );
 
 export const kyselyPrisma = remember('kyselyPrisma', () =>

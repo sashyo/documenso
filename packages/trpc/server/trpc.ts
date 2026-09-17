@@ -5,6 +5,7 @@ import type { TrpcApiLog } from '@documenso/lib/types/api-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { alphaid } from '@documenso/lib/universal/id';
 import { isAdmin } from '@documenso/lib/utils/is-admin';
+import { withMinidauthReader } from '@documenso/prisma/extensions/minidauth-reader';
 import { initTRPC, TRPCError } from '@trpc/server';
 import type { AnyZodObject } from 'zod';
 
@@ -112,30 +113,34 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
       position: 'trpcProcedure',
     });
 
-    return await next({
-      ctx: {
-        ...ctx,
-        logger: trpcApiV2Logger,
-        user: apiToken.user,
-        teamId: apiToken.teamId,
-        session: null,
-        metadata: {
-          ...ctx.metadata,
-          auditUser: apiToken.team
-            ? {
-                id: null,
-                email: null,
-                name: apiToken.team.name,
-              }
-            : {
-                id: apiToken.user.id,
-                email: apiToken.user.email,
-                name: apiToken.user.name,
-              },
-          auth: 'api',
-        } satisfies ApiRequestMetadata,
-      },
-    });
+    // Carry the verified user id as the minidauth reader for the whole request, so sealed fields the
+    // handler reads open as that user (gated by their quorum grant).
+    return await withMinidauthReader(apiToken.user.id, () =>
+      next({
+        ctx: {
+          ...ctx,
+          logger: trpcApiV2Logger,
+          user: apiToken.user,
+          teamId: apiToken.teamId,
+          session: null,
+          metadata: {
+            ...ctx.metadata,
+            auditUser: apiToken.team
+              ? {
+                  id: null,
+                  email: null,
+                  name: apiToken.team.name,
+                }
+              : {
+                  id: apiToken.user.id,
+                  email: apiToken.user.email,
+                  name: apiToken.user.name,
+                },
+            auth: 'api',
+          } satisfies ApiRequestMetadata,
+        },
+      }),
+    );
   }
 
   if (!ctx.session) {
@@ -165,24 +170,26 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
     position: 'trpcProcedure',
   });
 
-  return await next({
-    ctx: {
-      ...ctx,
-      teamId: ctx.teamId || -1,
-      logger: trpcSessionLogger,
-      user: ctx.user,
-      session: ctx.session,
-      metadata: {
-        ...ctx.metadata,
-        auditUser: {
-          id: ctx.user.id,
-          name: ctx.user.name,
-          email: ctx.user.email,
-        },
-        auth: 'session',
-      } satisfies ApiRequestMetadata,
-    },
-  });
+  return await withMinidauthReader(ctx.user.id, () =>
+    next({
+      ctx: {
+        ...ctx,
+        teamId: ctx.teamId || -1,
+        logger: trpcSessionLogger,
+        user: ctx.user,
+        session: ctx.session,
+        metadata: {
+          ...ctx.metadata,
+          auditUser: {
+            id: ctx.user.id,
+            name: ctx.user.name,
+            email: ctx.user.email,
+          },
+          auth: 'session',
+        } satisfies ApiRequestMetadata,
+      },
+    }),
+  );
 });
 
 export const maybeAuthenticatedMiddleware = t.middleware(async ({ ctx, next, path, meta }) => {
@@ -227,30 +234,34 @@ export const maybeAuthenticatedMiddleware = t.middleware(async ({ ctx, next, pat
       position: 'trpcProcedure',
     });
 
-    return await next({
-      ctx: {
-        ...ctx,
-        logger: trpcApiV2Logger,
-        user: apiToken.user,
-        teamId: apiToken.teamId,
-        session: null,
-        metadata: {
-          ...ctx.metadata,
-          auditUser: apiToken.team
-            ? {
-                id: null,
-                email: null,
-                name: apiToken.team.name,
-              }
-            : {
-                id: apiToken.user.id,
-                email: apiToken.user.email,
-                name: apiToken.user.name,
-              },
-          auth: 'api',
-        } satisfies ApiRequestMetadata,
-      },
-    });
+    // Carry the verified user id as the minidauth reader for the whole request, so sealed fields the
+    // handler reads open as that user (gated by their quorum grant).
+    return await withMinidauthReader(apiToken.user.id, () =>
+      next({
+        ctx: {
+          ...ctx,
+          logger: trpcApiV2Logger,
+          user: apiToken.user,
+          teamId: apiToken.teamId,
+          session: null,
+          metadata: {
+            ...ctx.metadata,
+            auditUser: apiToken.team
+              ? {
+                  id: null,
+                  email: null,
+                  name: apiToken.team.name,
+                }
+              : {
+                  id: apiToken.user.id,
+                  email: apiToken.user.email,
+                  name: apiToken.user.name,
+                },
+            auth: 'api',
+          } satisfies ApiRequestMetadata,
+        },
+      }),
+    );
   }
 
   // Treat a disabled session as anonymous. Most routes wired through
@@ -280,25 +291,27 @@ export const maybeAuthenticatedMiddleware = t.middleware(async ({ ctx, next, pat
     position: 'trpcProcedure',
   });
 
-  return await next({
-    ctx: {
-      ...ctx,
-      logger: trpcSessionLogger,
-      user: sessionUser,
-      session: sessionRecord,
-      metadata: {
-        ...ctx.metadata,
-        auditUser: sessionUser
-          ? {
-              id: sessionUser.id,
-              name: sessionUser.name,
-              email: sessionUser.email,
-            }
-          : undefined,
-        auth,
-      } satisfies ApiRequestMetadata,
-    },
-  });
+  return await withMinidauthReader(sessionUser?.id, () =>
+    next({
+      ctx: {
+        ...ctx,
+        logger: trpcSessionLogger,
+        user: sessionUser,
+        session: sessionRecord,
+        metadata: {
+          ...ctx.metadata,
+          auditUser: sessionUser
+            ? {
+                id: sessionUser.id,
+                name: sessionUser.name,
+                email: sessionUser.email,
+              }
+            : undefined,
+          auth,
+        } satisfies ApiRequestMetadata,
+      },
+    }),
+  );
 });
 
 export const adminMiddleware = t.middleware(async ({ ctx, next, path }) => {
