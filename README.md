@@ -42,6 +42,34 @@ Signing documents digitally should be fast and easy and should be the best pract
 
 Join us in creating the next generation of open trust infrastructure.
 
+## Data sealing and signing with minidauth (Tide)
+
+This fork adds two things on top of Documenso, both built on [minidauth](https://tide.org) and the Tide
+ORK cohort, and both **off unless configured** (`MINIDAUTH_SEAL_URL` unset means the app behaves exactly
+like upstream):
+
+- **Sealed at rest.** A document's title, a recipient's name, the email subject and message sent to
+  signers, the typed or drawn signatures, and the text a signer enters are sealed **before** they reach
+  Postgres. The database, and the app process, only ever hold `ms1:` ciphertext. The vendor key lives as
+  threshold shares across the ORK network and is never assembled here, so a stolen database or a leaked
+  backup reveals nothing. Records are opened again in-request, and only for a user a quorum granted the
+  reading role; a recipient opening a signing link opens the document on the owner's authority once their
+  token is verified. Revoke the role and reads stop everywhere. A Prisma client extension does the sealing
+  ([`packages/prisma/extensions/`](./packages/prisma/extensions/)); the recipient's email stays in the
+  clear because it is the routing/signing-link key the database matches on.
+
+- **Signed by a quorum.** When a recipient completes signing, the Tide ORK cohort **threshold-signs** a
+  canonical statement about the completion (envelope, signer, item hash, time), gated on the signer's
+  quorum-granted role. The 64-byte vendor-key signature and the statement are stored on the recipient row
+  (`cohortSignature` / `cohortStatement`) and are verifiable by anyone with the vendor public key — no
+  signing key is ever assembled, in Documenso or the sidecar, so no operator and no stolen database can
+  forge or alter a completed signature. See
+  [`packages/prisma/extensions/minidauth-sign.ts`](./packages/prisma/extensions/minidauth-sign.ts).
+  Best-effort and guarded: a signing service being down never blocks a person from signing.
+
+Setup uses a sealing minidauth and (optionally) a separate signing key; see the seal extension and the
+`MINIDAUTH_SEAL_URL` / `MINIDAUTH_SEAL_SIGNING_KEY_FILE` / `MINIDAUTH_SIGN_URL` variables.
+
 ## Recognition
 
 <p align="center">
