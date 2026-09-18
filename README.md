@@ -19,6 +19,41 @@
   <a href="https://github.com/sashyo/minidauth"><img alt="minidauth'd" src="https://img.shields.io/badge/minidauth%27d-sealed_at_rest-2ea44f?style=for-the-badge&logo=lock&logoColor=white"></a>
 </p>
 
+<!-- minidauth-run:start -->
+### Running it with minidauth
+
+Sealing is off until you point Documenso at a minidauth sidecar; unconfigured, it behaves exactly like upstream.
+
+1. **Bring up the backend.** In a checkout of [minidauth](https://github.com/sashyo/minidauth):
+
+   ```sh
+   cp operators.example.json operators.json
+   docker compose -f docker-compose.yml -f docker-compose.seal.yml up -d
+   # create a vendor key once (a licensed step; see that repo's docs/running.md)
+   ./bootstrap.sh
+   ```
+
+   This runs the sealing sidecar on `http://localhost:3021` and writes a signing key to `./keys/usertoken.key`. Full detail: minidauth's [docs/sealing.md](https://github.com/sashyo/minidauth/blob/main/docs/sealing.md).
+
+2. **Point Documenso at it.** Set these in its environment, then start Documenso as usual:
+
+   ```sh
+   MINIDAUTH_SEAL_URL=http://localhost:3021
+   MINIDAUTH_SEAL_SIGNING_KEY_FILE=/absolute/path/to/minidauth/keys/usertoken.key
+   # optional, to also threshold-sign completed documents: MINIDAUTH_SIGN_URL=http://localhost:3021
+   ```
+
+   Now document titles, recipient names, the subject and body of signer emails, and the signatures themselves are sealed before they reach the database.
+
+3. **Grant a reader.** Sealed fields open only for a user the quorum granted the `crm-reader` role. Grant it to a Documenso user by their id, from the minidauth checkout:
+
+   ```sh
+   DEMO_UID=<documenso user id> ./bootstrap.sh
+   ```
+
+   Revoke it in minidauth and their reads go dark, with no change to Documenso.
+<!-- minidauth-run:end -->
+
 <p align="center" style="margin-top: 20px">
   <p align="center">
   The Open Source DocuSign Alternative.
